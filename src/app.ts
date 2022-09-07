@@ -1,18 +1,11 @@
 import { App } from '@slack/bolt';
+import ndarray from 'ndarray';
 
 const app = new App ({
-  appToken: 'xapp-1-A041ARPT95H-4042012538741-cc1871f14a12e94c8334f88661f50aa7b2c990b7cb334a0d3d0602a1027bf9fb',
-  token: 'xoxb-31642232595-4068682162160-X2pkBpZjgbaZuQqMBYT8dpaO',
+  appToken: process.env.SLACK_APP_TOKEN,
+  token: process.env.SLACK_BOT_TOKEN,
   socketMode: true,
 });
-
-function tileBg() {
-  return ':green-bg:'
-}
-
-function deepcopy(val: any) {
-  return JSON.parse(JSON.stringify(val))
-}
 
 const background = `
 0 0 0 0 0 0 0 0 0 0
@@ -25,17 +18,32 @@ const background = `
 0 1 1 1 1 1 1 1 1 0
 0 1 1 1 1 1 1 1 1 0
 0 0 0 0 0 0 0 0 0 0
-`
+`.trim().split('\n').map(r => r.split(' ').map(Number));
 
-function genBackground() {
-  const raw = background.trim().split('\n').map(r => r.split(' '));
-  const map = raw.map(r => r.map(o => `:bg-${o}:`));
+function genBackground(raw: number[][] = background) {
+  const map = raw.map(r => r.map(o => {
+    if (o === 256) return ':smile_cat:';
+    return `:bg-${o}:`;
+  }));
   return map;
 }
 
 function renderMap(x: number = 2, y: number = 2) {
-  const bg = genBackground();
-  bg[y][x] = ':smile_cat:';
+  const nd = ndarray(([] as number[]).concat(...background), [10, 10]);
+  nd.set(x, y, 256);
+  const viewX = Math.min(x-2, 5);
+  const viewY = Math.min(y-2, 5);
+  const view = nd.lo(viewX, viewY).hi(5, 5);
+  const viewArray: number[][] = [];
+  for (let row = 0; row < view.shape[1]; ++row) {
+    viewArray.push([]);
+    for (let col = 0; col < view.shape[1]; ++col) {
+      viewArray[row].push(view.get(col, row));
+    }
+  }
+  console.log(viewArray);
+  const bg = genBackground(viewArray);
+  console.log(bg);
   return {
     "type": "section",
     "text": {
@@ -113,7 +121,7 @@ app.action(/button-(left|right|up|down)/, async ({ body, action, ack, client, re
   console.log(action, body);
   if (action.type !== 'button') return;
   if (body.type !== 'block_actions') return;
-  if (body.container.type !== 'message') return;
+  if (body.container?.type !== 'message') return;
   const [x, y] = action.value.split('-').map(Number);
   const map = genBackground();
   if (map[y][x] === ':bg-0:') return;
