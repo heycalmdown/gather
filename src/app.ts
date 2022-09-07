@@ -20,35 +20,59 @@ const background = `
 0 0 0 0 0 0 0 0 0 0
 `.trim().split('\n').map(r => r.split(' ').map(Number));
 
-function genBackground(raw: number[][] = background) {
-  const map = raw.map(r => r.map(o => {
-    if (o === 256) return ':smile_cat:';
-    return `:bg-${o}:`;
-  }));
-  return map;
+const defaultMap = ndarray(([] as number[]).concat(...background), [getWidth(), getHeight()]);
+
+const VIEW_WIDTH = 8;
+const VIEW_HEIGHT = 6;
+const VIEW_WIDTH_HALF = Math.floor(VIEW_WIDTH / 2);
+const VIEW_HEIGHT_HALF = Math.floor(VIEW_HEIGHT / 2);
+
+function getWidth() {
+  return background[0].length;
 }
 
-function renderMap(x: number = 2, y: number = 2) {
-  const nd = ndarray(([] as number[]).concat(...background), [10, 10]);
-  nd.set(x, y, 256);
-  const viewX = Math.min(x-2, 5);
-  const viewY = Math.min(y-2, 5);
-  const view = nd.lo(viewX, viewY).hi(5, 5);
-  const viewArray: number[][] = [];
+function getHeight() {
+  return background.length;
+}
+
+function getMap() {
+  return ndarray(([] as number[]).concat(...background), [getWidth(), getHeight()]);
+}
+
+function renderTile(tile: number) {
+  if (tile === 256) return ':smile_cat:';
+  return `:bg-${tile}:`;
+}
+
+function renderTiles(view: ndarray.NdArray<number[]> = defaultMap) {
+  const viewArray: string[][] = [];
+
   for (let row = 0; row < view.shape[1]; ++row) {
     viewArray.push([]);
-    for (let col = 0; col < view.shape[1]; ++col) {
-      viewArray[row].push(view.get(col, row));
+    for (let col = 0; col < view.shape[0]; ++col) {
+      const tile = view.get(col, row);
+      viewArray[row].push(renderTile(tile));
     }
   }
-  console.log(viewArray);
-  const bg = genBackground(viewArray);
-  console.log(bg);
+  return viewArray;
+}
+
+function sliceView(nd: ndarray.NdArray<number[]>, x: number, y: number)  {
+  const left = Math.min(x - VIEW_WIDTH_HALF, getWidth() - VIEW_WIDTH);
+  const top = Math.min(y - VIEW_HEIGHT_HALF, getHeight() - VIEW_HEIGHT);
+  return nd.lo(left, top).hi(VIEW_WIDTH, VIEW_HEIGHT);
+}
+
+function renderView(x: number = 2, y: number = 2) {
+  const map = getMap();
+  map.set(x, y, 256);
+  const view = sliceView(map, x, y);
+  const renderedArray = renderTiles(view);
   return {
     "type": "section",
     "text": {
       "type": "mrkdwn",
-      "text": bg.map(r => r.join('')).join('\n'),
+      "text": renderedArray.map(r => r.join('')).join('\n'),
     }
   }
 }
@@ -109,7 +133,7 @@ app.command('/gather', async ({ command, ack, client }) => {
     text: 'gather',
     user: command.user_id,
     blocks: [
-      renderMap(),
+      renderView(),
       renderButtons(),
     ]
   })
@@ -118,16 +142,15 @@ app.command('/gather', async ({ command, ack, client }) => {
 
 app.action(/button-(left|right|up|down)/, async ({ body, action, ack, client, respond }) => {
   await ack();
-  console.log(action, body);
   if (action.type !== 'button') return;
   if (body.type !== 'block_actions') return;
   if (body.container?.type !== 'message') return;
+
   const [x, y] = action.value.split('-').map(Number);
-  const map = genBackground();
-  if (map[y][x] === ':bg-0:') return;
+  if (defaultMap.get(x, y) === 0) return;
   await respond({
     blocks: [
-      renderMap(x, y),
+      renderView(x, y),
       renderButtons(x, y),
     ]
   });
