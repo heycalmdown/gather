@@ -1,4 +1,4 @@
-import { App } from '@slack/bolt';
+import { App, Block, KnownBlock } from '@slack/bolt';
 import ndarray from 'ndarray';
 
 const app = new App ({
@@ -8,16 +8,17 @@ const app = new App ({
 });
 
 const background = `
-0 0 0 0 0 0 0 0 0 0
-0 1 1 1 1 1 1 1 1 0
-0 1 1 1 1 1 1 1 1 0
-0 1 1 2 2 2 2 1 1 0
-0 1 1 2 2 2 2 1 1 0
-0 1 1 2 2 2 2 1 1 0
-0 1 1 2 2 2 2 1 1 0
-0 1 1 1 1 1 1 1 1 0
-0 1 1 1 1 1 1 1 1 0
-0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 0
+0 1 1 1 1 1 1 1 1 1 0
+0 1 1 1 1 1 1 1 1 1 0
+0 1 1 2 2 2 2 2 1 1 0
+0 1 1 2 2 2 2 2 1 1 0
+0 1 1 2 2 1024 2 2 1 1 0
+0 1 1 2 2 2 2 2 1 1 0
+0 1 1 2 2 2 2 2 1 1 0
+0 1 1 1 1 1 1 1 1 1 0
+0 1 1 1 1 1 1 1 1 1 0
+0 0 0 0 0 0 0 0 0 0 0
 `.trim().split('\n').map(r => r.split(' ').map(Number));
 
 const defaultMap = ndarray(([] as number[]).concat(...background), [getWidth(), getHeight()]);
@@ -40,6 +41,7 @@ function getMap() {
 }
 
 function renderTile(tile: number) {
+  if (tile === 1024) return ':gem:';
   if (tile === 256) return ':smile_cat:';
   return `:bg-${tile}:`;
 }
@@ -125,6 +127,23 @@ function renderButtons(x: number = 2, y: number = 2) {
   }
 }
 
+function renderMessage(messages: string[]) {
+  return {
+    "type": "context",
+    "elements": [
+      {
+        "type": "image",
+        "image_url": "https://pbs.twimg.com/profile_images/625633822235693056/lNGUneLX_400x400.jpg",
+        "alt_text": "cute cat"
+      },
+      {
+        "type": "mrkdwn",
+        "text": messages.join('\n')
+      }
+    ]
+  }
+}
+
 app.command('/gather', async ({ command, ack, client }) => {
   await ack();
   console.log(command);
@@ -148,21 +167,26 @@ app.action(/button-(left|right|up|down)/, async ({ body, action, ack, client, re
 
   const [x, y] = action.value.split('-').map(Number);
   if (defaultMap.get(x, y) === 0) return;
+
+  const text = [];
+  if (defaultMap.get(x, y) >= 1024) {
+    text.push('냠... :gem:')
+  } else {
+    text.push('냐옹~')
+  }
+
+  const blocks: Block[] = [
+    renderView(x, y),
+    renderButtons(x, y),
+  ];
+
+  if (text.length) {
+    blocks.push(renderMessage(text));
+  }
+
   await respond({
-    blocks: [
-      renderView(x, y),
-      renderButtons(x, y),
-    ]
+    blocks
   });
-  // await client.chat.update({
-  //   channel: body.channel?.id!,
-  //   ts: body.container.message_ts,
-  //   text: 'gather',
-  //   blocks: [
-  //     renderMap(2, 1),
-  //     renderButtons(),
-  //   ]
-  // })
 });
 
 (async () => {
